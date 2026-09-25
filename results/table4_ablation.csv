@@ -1,0 +1,13 @@
+﻿dataset,method,ACC±std,F1±std,相对CDPSO(完整)的Friedman排名,结论,data_source,status
+LoL,IPSO,0.7225±0.0130,0.7225±0.0130,6,待对比,real_experiment,n.s.
+LoL,IPSO+OBL,0.7251±0.0135,0.7251±0.0135,4,待对比,real_experiment,n.s.
+LoL,CDPSO-无重启,0.7252±0.0120,0.7252±0.0120,2,待对比,real_experiment,n.s.
+LoL,CDPSO-无扰动,0.7254±0.0111,0.7254±0.0111,1,待对比,real_experiment,n.s.
+LoL,CDPSO-无多样性,0.7234±0.0113,0.7234±0.0113,5,待对比,real_experiment,n.s.
+LoL,CDPSO(完整),0.7252±0.0120,0.7252±0.0120,3,完整,real_experiment,OK
+Heart,IPSO,0.8470±0.0288,0.8470±0.0288,5,待对比,real_experiment,n.s.
+Heart,IPSO+OBL,0.8483±0.0290,0.8483±0.0290,3,待对比,real_experiment,n.s.
+Heart,CDPSO-无重启,0.8523±0.0327,0.8523±0.0327,1,待对比,real_experiment,n.s.
+Heart,CDPSO-无扰动,0.8467±0.0298,0.8467±0.0298,6,待对比,real_experiment,n.s.
+Heart,CDPSO-无多样性,0.8483±0.0288,0.8483±0.0288,4,待对比,real_experiment,n.s.
+Heart,CDPSO(完整),0.8523±0.0327,0.8523±0.0327,2,完整,real_experiment,OK
