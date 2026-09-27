@@ -55,6 +55,8 @@ W_MIN = 0.4
 P_M = 0.2             # 高斯扰动概率
 SIGMA0 = 0.2          # 初始扰动强度
 STAG_LIMIT = 3        # 停滞阈值（代）
+RESTART_EVENTS = 0    # 诊断：停滞重启触发次数
+MAX_STAG = 0          # 诊断：观测到的最大连续停滞代数
 K_RESET = 0.2         # 停滞重启重置比例
 
 
@@ -343,7 +345,10 @@ def pso_search(X_fit, y_fit, d_in, seed, mode, rng=None):
                 stag = 0
 
         # 停滞重启
+        global RESTART_EVENTS, MAX_STAG
+        MAX_STAG = max(MAX_STAG, stag)
         if use_restart and stag >= STAG_LIMIT:
+            RESTART_EVENTS += 1
             n_reset = max(1, int(K_RESET * N_POP))
             worst_idx = np.argsort(pbest_fit)[-n_reset:]
             X[worst_idx] = (tent_sequence(rng, n_reset, dim) * 2.0 - 1.0) * B

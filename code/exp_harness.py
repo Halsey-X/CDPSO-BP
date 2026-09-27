@@ -264,8 +264,11 @@ def build_table4(data):
                 rows.append([ds, m, "—", "—", "—", "—", info.get((ds, m), "—"), "【待补：未运行】"])
                 continue
             x = present[m]
+            f1_raw = np.array([r[2] for r in data.get((ds, m), []) if r[2] == r[2]], float)
+            f1_txt = (f"{f1_raw.mean():.4f}±{f1_raw.std(ddof=1):.4f}"
+                      if len(f1_raw) >= 2 else "—")
             rows.append([ds, m, f"{x.mean():.4f}±{x.std(ddof=1):.4f}",
-                         f"{x.mean():.4f}±{x.std(ddof=1):.4f}",
+                         f1_txt,
                          rank_map.get(m, "—"),
                          "完整" if m == "CDPSO(完整)" else "待对比",
                          info.get((ds, m), "—"), "OK" if m == "CDPSO(完整)" else "n.s."])
