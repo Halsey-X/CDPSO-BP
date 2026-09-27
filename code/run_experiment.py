@@ -54,9 +54,14 @@ W_MAX = 0.9
 W_MIN = 0.4
 P_M = 0.2             # 高斯扰动概率
 SIGMA0 = 0.2          # 初始扰动强度
-STAG_LIMIT = 3        # 停滞阈值（代）
+STAG_LIMIT = 2        # 停滞阈值（代）：原为 3，诊断显示从未触发，现收紧为 2
+RHO_MIN = 0.20        # 多样性坍缩判据：d(t)/d(0) 低于此值即触发重启
 RESTART_EVENTS = 0    # 诊断：停滞重启触发次数
 MAX_STAG = 0          # 诊断：观测到的最大连续停滞代数
+
+# 诊断/绘图：最近一次搜索的 gbest 适应度轨迹与最近一次微调的验证损失轨迹
+LAST_SEARCH_CURVE = []
+LAST_VAL_CURVE = []
 K_RESET = 0.2         # 停滞重启重置比例
 
 
@@ -152,12 +157,14 @@ def mse(yh, y):
 def bp_finetune(w0, X, y, d_in, epochs, lr=LR, momentum=MOMENTUM, Xva=None, yva=None,
                 early_stop=False, es_patience=30):
     """全批梯度下降 + 动量。返回最终权值向量。若 early_stop 且给 Xva，则按验证损失早停。"""
+    global LAST_VAL_CURVE
     w = w0.copy()
     v = np.zeros_like(w)
     best_w = w.copy()
     best_va = float("inf")
     no_improve = 0
     n = X.shape[0]
+    curve = []
     for _ in range(epochs):
         W1, b1, W2, b2 = decode(w, d_in)
         z1 = X @ W1.T + b1
@@ -176,6 +183,9 @@ def bp_finetune(w0, X, y, d_in, epochs, lr=LR, momentum=MOMENTUM, Xva=None, yva=
         grad = np.concatenate([gW1.ravel(), gb1, gW2.ravel(), gb2])
         v = momentum * v - lr * grad
         w = w + v
+        # 记录验证损失轨迹（供绘图）
+        if Xva is not None:
+            curve.append(float(mse(forward(Xva, w, d_in), yva)))
         if early_stop and Xva is not None:
             lv = mse(forward(Xva, w, d_in), yva)
             if lv < best_va:
@@ -185,7 +195,9 @@ def bp_finetune(w0, X, y, d_in, epochs, lr=LR, momentum=MOMENTUM, Xva=None, yva=
             else:
                 no_improve += 1
                 if no_improve >= es_patience:
+                    LAST_VAL_CURVE = curve
                     return best_w
+    LAST_VAL_CURVE = curve
     return best_w if early_stop and Xva is not None else w
 
 
@@ -299,6 +311,8 @@ def pso_search(X_fit, y_fit, d_in, seed, mode, rng=None):
     d0 = d0 if d0 > 1e-12 else 1.0
 
     stag = 0
+    rho_now = 1.0
+    curve = []
     for t in range(1, T_MAX + 1):
         # 多样性反馈权重
         if use_schedule_w:
@@ -307,6 +321,7 @@ def pso_search(X_fit, y_fit, d_in, seed, mode, rng=None):
                 center = X.mean(axis=0)
                 d_t = float(np.mean(np.linalg.norm(X - center, axis=1)))
                 rho = min(d_t / d0, 1.0)
+                rho_now = rho
                 w = w_base * (1.0 + rho) / 2.0
             else:
                 w = w_base
@@ -344,10 +359,12 @@ def pso_search(X_fit, y_fit, d_in, seed, mode, rng=None):
                 g_fit = fgp
                 stag = 0
 
-        # 停滞重启
+        curve.append(float(g_fit))
+
+        # 停滞重启：连续 STAG_LIMIT 代无改进，或种群多样性坍缩（rho < RHO_MIN）
         global RESTART_EVENTS, MAX_STAG
         MAX_STAG = max(MAX_STAG, stag)
-        if use_restart and stag >= STAG_LIMIT:
+        if use_restart and (stag >= STAG_LIMIT or rho_now < RHO_MIN):
             RESTART_EVENTS += 1
             n_reset = max(1, int(K_RESET * N_POP))
             worst_idx = np.argsort(pbest_fit)[-n_reset:]
@@ -358,6 +375,8 @@ def pso_search(X_fit, y_fit, d_in, seed, mode, rng=None):
             pbest_fit[worst_idx] = fit[worst_idx]
             stag = 0
 
+    global LAST_SEARCH_CURVE
+    LAST_SEARCH_CURVE = curve
     return g, g_fit
 
 

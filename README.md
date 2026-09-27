@@ -20,15 +20,21 @@ CDPSO-BP/
 │   ├── run_experiment.py   # Main pipeline: BP, PSO-BP, IPSO-BP, CDPSO-BP + ablation variants (30 seeds)
 │   ├── baselines.py        # 10 extra baselines: CLPSO, APSO, AMPSO, DMPSO, GLPSO, SHADE, jSO, CMA-ES, Xavier+Adam, Kaiming+Adam
 │   ├── sensitivity.py      # Parameter sensitivity study (Table 6)
-│   └── exp_harness.py      # Q1-grade statistics: Friedman + Holm correction, Wilcoxon, Cliff's delta, 95% CI
+│   ├── exp_harness.py      # Q1-grade statistics: Friedman + Holm correction, Wilcoxon, Cliff's delta, 95% CI
+│   ├── make_figures.py     # Regenerates Fig. 1 (LoL) and Fig. 2 (Heart) from the recorded curves
+│   └── diag_restart.py     # Diagnostic: counts how often the stagnation-restart trigger actually fires
 ├── data/
 │   ├── heart.csv           # Heart disease dataset (918 samples, 19 features) — see Data sources
 │   └── lol.csv             # League of Legends ranked 10-min dataset (9,879 samples, 38 features) — see Data sources
-└── results/                # Final tables produced by the real 30-seed runs
+└── results/                # Final tables and figures produced by the real 30-seed runs
+    ├── raw_results.csv     # Per-seed raw records (1,260 rows): dataset, method, seed, accuracy, F1, search fitness
     ├── table3_significance.csv
     ├── table4_ablation.csv
     ├── table5_baselines.csv
     ├── table6_sensitivity.csv
+    ├── sensitivity.csv
+    ├── fig1_lol.png
+    ├── fig2_heart.png
     └── summary.json
 ```
 
@@ -55,9 +61,19 @@ python code/sensitivity.py --seeds 10
 
 # 4) Generate Q1-grade statistical tables (Friedman + Holm, Cliff's delta, 95% CI)
 python code/exp_harness.py
+
+# 5) Regenerate the two manuscript figures
+python code/make_figures.py
 ```
 
 Each seed is deterministic (`seed = 3000 + k`), so the tables in `results/` are exactly reproducible.
+
+> **Note on the restart trigger.** The stagnation restart fires when the global best has not improved for
+> `STAG_LIMIT = 2` consecutive generations **or** when the swarm diversity ratio collapses below
+> `RHO_MIN = 0.20`. An earlier configuration used `STAG_LIMIT = 3` alone; `code/diag_restart.py`
+> showed that trigger never fired (0 restarts in a full run), which made the "no-restart" ablation
+> indistinguishable from the full CDPSO. The current dual criterion yields about 7 restarts per run
+> and makes the ablation informative.
 
 ## Data sources
 

@@ -1,5 +1,4 @@
 __pycache__/
 *.pyc
 results/demo/
-results/raw_results.csv
 .ipynb_checkpoints/
