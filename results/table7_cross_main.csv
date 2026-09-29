@@ -1,0 +1,6 @@
+﻿method,avg_rank,best_count,mean_acc,friedman_p,status
+CDPSO-BP,2.00,3,0.8282,5.189e-05,OK
+BP,2.42,6,0.8294,5.189e-05,OK
+IPSO-BP,2.58,2,0.8277,5.189e-05,OK
+PSO-BP,3.08,1,0.8258,5.189e-05,OK
+BP-30,4.92,0,0.7920,5.189e-05,OK

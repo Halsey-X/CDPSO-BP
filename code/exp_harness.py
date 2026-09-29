@@ -258,6 +258,89 @@ def build_table3(data):
     return rows
 
 
+def _paired(data, ds, m, ref):
+    """按 seed 对齐取出 (m, ref) 在同一数据集上的逐种子 ACC。"""
+    da = {r[0]: r[1] for r in data.get((ds, m), [])}
+    db = {r[0]: r[1] for r in data.get((ds, ref), [])}
+    seeds = sorted(set(da) & set(db))
+    if len(seeds) < 2:
+        return np.array([]), np.array([])
+    return np.array([da[s] for s in seeds]), np.array([db[s] for s in seeds])
+
+
+def _verdict(d_pp, p, cd):
+    if p == p and p < 0.05:
+        return f"{d_pp:+.2f}pp (p={p:.3g}, {'\u2191\u4f18' if d_pp > 0 else '\u2193\u52a3'})"
+    if p == p:
+        return f"{d_pp:+.2f}pp (p={p:.3g}, \u2248)"
+    return f"{d_pp:+.2f}pp (p=n/a, \u2248)"
+
+
+def ablation_verdict(data, ds, m, ref="CDPSO(\u5b8c\u6574)"):
+    """逐数据集：消融变体 vs 完整模型 的 Wilcoxon 配对检验结论。"""
+    if m == ref:
+        return "\u53c2\u7167\uff08\u5b8c\u6574\uff09"
+    x, y = _paired(data, ds, m, ref)
+    if len(x) < 5:
+        return "\u6837\u672c\u4e0d\u8db3"
+    d = x - y
+    try:
+        p = float(stats.wilcoxon(x, y)[1])
+    except Exception:
+        p = float("nan")
+    return _verdict(100 * float(d.mean()), p, cliffs_delta(x, y))
+
+
+def build_table_cross_tests(data):
+    """跨数据集汇总配对检验：把 12 个数据集 × 30 种子的配对差 pooling 后做 Wilcoxon。"""
+    datasets = detect_datasets(data)
+    pairs = [
+        ("CDPSO-BP", "BP-30", "主"),
+        ("CDPSO-BP", "BP", "主"),
+        ("CDPSO-BP", "PSO-BP", "主"),
+        ("CDPSO-BP", "IPSO-BP", "主"),
+        ("CDPSO(\u5b8c\u6574)", "CDPSO-\u65e0\u591a\u6837\u6027", "消融"),
+        ("CDPSO(\u5b8c\u6574)", "CDPSO-\u65e0\u6270\u52a8", "消融"),
+        ("CDPSO(\u5b8c\u6574)", "CDPSO-\u65e0\u91cd\u542f", "消融"),
+        ("CDPSO(\u5b8c\u6574)", "IPSO+OBL", "消融"),
+        ("CDPSO(\u5b8c\u6574)", "IPSO", "消融"),
+    ]
+    header = ["对照组", "处理组", "类别", "n(配对)", "平均差(pp)", "95%CI(pp)",
+              "Wilcoxon p", "Cliff's delta", "逐数据集 胜/平/负", "结论"]
+    rows = []
+    for a, b, cat in pairs:
+        diffs, per_ds = [], {"w": 0, "t": 0, "l": 0}
+        n_ds = 0
+        for ds in datasets:
+            x, y = _paired(data, ds, a, b)
+            if len(x) < 5:
+                continue
+            n_ds += 1
+            diffs.append(x - y)
+            dm = x.mean() - y.mean()
+            if dm > 1e-9:
+                per_ds["w"] += 1
+            elif dm < -1e-9:
+                per_ds["l"] += 1
+            else:
+                per_ds["t"] += 1
+        if not diffs:
+            rows.append([b, a, cat, 0, "—", "—", "—", "—", "—", "【待补：数据不足】"])
+            continue
+        d = np.concatenate(diffs)
+        dpp = 100 * float(d.mean())
+        try:
+            p = float(stats.wilcoxon(d)[1]) if np.any(d != 0) else float("nan")
+        except Exception:
+            p = float("nan")
+        rows.append([b, a, cat, len(d), f"{dpp:+.3f}", f"±{100*ci95(d):.3f}",
+                     (f"{p:.4g}" if p == p else "n/a"), f"{cliffs_delta(d, np.zeros_like(d)):+.3f}",
+                     f"{per_ds['w']}/{per_ds['t']}/{per_ds['l']} (共{n_ds})",
+                     _verdict(dpp, p, 0.0)])
+    write_table(OUT_DIR + "/table9_cross_tests.csv", header, rows)
+    return rows
+
+
 def build_table4(data):
     datasets = detect_datasets(data)
     out, info = gather(data, datasets, ABLATION_METHODS)
@@ -284,7 +367,7 @@ def build_table4(data):
             rows.append([ds, m, f"{x.mean():.4f}±{x.std(ddof=1):.4f}",
                          f1_txt,
                          rank_map.get(m, "—"),
-                         "完整" if m == "CDPSO(完整)" else "待对比",
+                         ablation_verdict(data, ds, m),
                          info.get((ds, m), "—"), "OK" if m == "CDPSO(完整)" else "n.s."])
     write_table(OUT_DIR + "/table4_ablation.csv", header, rows)
     return rows
@@ -314,8 +397,11 @@ def build_table5(data):
             h = hmap.get(m)
             hp = h["holm_p"] if h and h["holm_p"] == h["holm_p"] else "—"
             sig = "sig" if (h and h["sig"]) else "n.s."
+            f1_raw = np.array([r[2] for r in data.get((ds, m), []) if r[2] == r[2]], float)
+            f1_txt = (f"{f1_raw.mean():.4f}±{f1_raw.std(ddof=1):.4f}"
+                      if len(f1_raw) >= 2 else "—")
             rows.append([ds, m, f"{x.mean():.4f}±{x.std(ddof=1):.4f}(±{ci95(x):.4f})",
-                         f"{x.mean():.4f}±{x.std(ddof=1):.4f}", rank_map.get(m, "—"),
+                         f1_txt, rank_map.get(m, "—"),
                          hp, info.get((ds, m), "—"), sig])
     write_table(OUT_DIR + "/table5_baselines.csv", header, rows)
     return rows
@@ -382,7 +468,8 @@ def build_table_cross(data):
 def build_table_cross_all(data):
     """跨数据集汇总（全部方法：主+消融+基线），用于补充材料。"""
     datasets = detect_datasets(data)
-    allm = MAIN_METHODS + ABLATION_METHODS + BASELINE_METHODS
+    # CDPSO(完整) 与 CDPSO-BP 为同一配置（cdpso_full），跨方法总排名中仅保留 CDPSO-BP
+    allm = MAIN_METHODS + [m for m in ABLATION_METHODS if m != "CDPSO(完整)"] + BASELINE_METHODS
     per_ds_acc = {m: {} for m in allm}
     for ds in datasets:
         for m in allm:
@@ -431,16 +518,18 @@ def run_real():
     t6 = build_table6(data, OUT_DIR + "/sensitivity.csv")
     t7 = build_table_cross(data)
     t8 = build_table_cross_all(data)
+    t9 = build_table_cross_tests(data)
     # summary
     summary = {"note": "real mode; 12 datasets; cross-dataset summary generated",
                "datasets": detect_datasets(data),
                "table3_rows": len(t3), "table4_rows": len(t4),
                "table5_rows": len(t5), "table6_rows": len(t6),
-               "table7_rows": len(t7), "table8_rows": len(t8)}
+               "table7_rows": len(t7), "table8_rows": len(t8), "table9_rows": len(t9)}
     with open(OUT_DIR + "/summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
     print("已写出: table3_significance.csv / table4_ablation.csv / table5_baselines.csv / "
-          "table6_sensitivity.csv / summary.json")
+          "table6_sensitivity.csv / table7_cross_main.csv / table8_cross_all.csv / "
+          "table9_cross_tests.csv / summary.json")
 
 
 # ----------------------------------------------------------------------------

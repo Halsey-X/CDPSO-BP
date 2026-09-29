@@ -1,7 +1,24 @@
 {
-  "note": "real mode; reconstructed seeds flagged; ablation/baseline/sensitivity = 待补",
-  "table3_rows": 20,
-  "table4_rows": 12,
-  "table5_rows": 30,
-  "table6_rows": 12
+  "note": "real mode; 12 datasets; cross-dataset summary generated",
+  "datasets": [
+    "Heart",
+    "LoL",
+    "Pima",
+    "WDBC",
+    "Ionosphere",
+    "Sonar",
+    "Banknote",
+    "Spambase",
+    "Haberman",
+    "Parkinson",
+    "Blood",
+    "Phoneme"
+  ],
+  "table3_rows": 120,
+  "table4_rows": 72,
+  "table5_rows": 180,
+  "table6_rows": 13,
+  "table7_rows": 5,
+  "table8_rows": 20,
+  "table9_rows": 9
 }
