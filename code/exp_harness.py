@@ -468,8 +468,9 @@ def build_table_cross(data):
 def build_table_cross_all(data):
     """跨数据集汇总（全部方法：主+消融+基线），用于补充材料。"""
     datasets = detect_datasets(data)
-    # CDPSO(完整) 与 CDPSO-BP 为同一配置（cdpso_full），跨方法总排名中仅保留 CDPSO-BP
-    allm = MAIN_METHODS + [m for m in ABLATION_METHODS if m != "CDPSO(完整)"] + BASELINE_METHODS
+    # 去重：CDPSO(完整)==CDPSO-BP、IPSO==IPSO-BP 为同一配置，跨方法总排名中仅保留主方法名
+    DUP = ("CDPSO(完整)", "IPSO")
+    allm = MAIN_METHODS + [m for m in ABLATION_METHODS if m not in DUP] + BASELINE_METHODS
     per_ds_acc = {m: {} for m in allm}
     for ds in datasets:
         for m in allm:
