@@ -48,6 +48,18 @@ ABLATION_METHODS = ["IPSO", "IPSO+OBL", "CDPSO-无重启", "CDPSO-无扰动",
 BASELINE_METHODS = ["CLPSO", "APSO", "AMPSO", "DMPSO", "GLPSO", "SHADE",
                     "jSO", "CMA-ES", "Xavier+Adam", "Kaiming+Adam"]      # 表5
 
+# 数据集顺序（新增 10 个公开二分类数据集后共 12 个；Heart/LoL 前置，其余按字母序）
+DATASET_ORDER = ["Heart", "LoL", "Pima", "WDBC", "Ionosphere", "Sonar", "Banknote",
+                 "Spambase", "Haberman", "Parkinson", "Blood", "Phoneme"]
+
+
+def detect_datasets(data):
+    """从 raw_results.csv 中自动识别出现的数据集；按 DATASET_ORDER 优先排序。"""
+    present = set(ds for (ds, m) in data.keys())
+    ordered = [d for d in DATASET_ORDER if d in present]
+    rest = sorted(present - set(DATASET_ORDER))
+    return ordered + rest
+
 # 稿件表2 真实均值±标准差（用于 --init-template 重建种子）；accuracy / f1 分别给
 MANUSCRIPT_TABLE2 = {
     "LoL": {  # 电竞
@@ -198,11 +210,12 @@ def write_table(path, header, rows):
 
 def build_table3(data):
     """显著性检验（主方法 CDPSO-BP 对照）。有真实数据算，否则待补。"""
-    out, info = gather(data, ["LoL", "Heart"], MAIN_METHODS)
+    datasets = detect_datasets(data)
+    out, info = gather(data, datasets, MAIN_METHODS)
     rows = []
     header = ["dataset", "metric", "method", "mean", "std", "ci95(±)", "friedman_p",
               "holm_p", "cliffs_delta", "显著性(↑/↓/≈)", "data_source", "status"]
-    for ds in ["LoL", "Heart"]:
+    for ds in datasets:
         present = out.get(ds, {})
         if CONTROL not in present or len(present) < 2:
             rows.append([ds, "ACC/F1", "—", "—", "—", "—", "—", "—", "—", "—", "—",
@@ -246,10 +259,11 @@ def build_table3(data):
 
 
 def build_table4(data):
-    out, info = gather(data, ["LoL", "Heart"], ABLATION_METHODS)
+    datasets = detect_datasets(data)
+    out, info = gather(data, datasets, ABLATION_METHODS)
     header = ["dataset", "method", "ACC±std", "F1±std", "相对CDPSO(完整)的Friedman排名", "结论", "data_source", "status"]
     rows = []
-    for ds in ["LoL", "Heart"]:
+    for ds in datasets:
         present = out.get(ds, {})
         if "CDPSO(完整)" not in present or len(present) < 2:
             rows.append([ds, "—", "—", "—", "—", "—", "—",
@@ -278,10 +292,11 @@ def build_table4(data):
 
 def build_table5(data):
     allm = MAIN_METHODS + BASELINE_METHODS
-    out, info = gather(data, ["LoL", "Heart"], allm)
+    datasets = detect_datasets(data)
+    out, info = gather(data, datasets, allm)
     header = ["dataset", "method", "ACC±std(95%CI)", "F1±std", "Friedman排名", "Holm显著性(vs CDPSO-BP)", "data_source", "status"]
     rows = []
-    for ds in ["LoL", "Heart"]:
+    for ds in datasets:
         present = out.get(ds, {})
         if CONTROL not in present:
             for m in allm:
@@ -322,6 +337,81 @@ def build_table6(data, sens_path):
     return rows
 
 
+def build_table_cross(data):
+    """跨数据集汇总（主方法）：每数据集按 ACC 排名，取平均秩与夺冠次数，并做跨数据集 Friedman 检验。"""
+    datasets = detect_datasets(data)
+    methods = MAIN_METHODS
+    per_ds_acc = {m: {} for m in methods}
+    for ds in datasets:
+        for m in methods:
+            rows_m = data.get((ds, m), [])
+            acc = np.array([r[1] for r in rows_m if r[1] == r[1]], float)
+            if len(acc) >= 2:
+                per_ds_acc[m][ds] = float(acc.mean())
+    valid_ds = [ds for ds in datasets if all(ds in per_ds_acc[m] for m in methods)]
+    if len(valid_ds) < 2:
+        write_table(OUT_DIR + "/table7_cross_main.csv",
+                    ["method", "avg_rank", "best_count", "mean_acc", "friedman_p", "status"],
+                    [["—", "—", "—", "—", "—", "【待补：可用数据集不足】"]])
+        return []
+    avg_rank = {m: 0.0 for m in methods}
+    best_count = {m: 0 for m in methods}
+    for ds in valid_ds:
+        order = sorted(methods, key=lambda m: per_ds_acc[m][ds], reverse=True)
+        for i, m in enumerate(order):
+            avg_rank[m] += (i + 1)
+            if i == 0:
+                best_count[m] += 1
+    for m in methods:
+        avg_rank[m] /= len(valid_ds)
+    cols = [np.array([per_ds_acc[m][ds] for ds in valid_ds], float) for m in methods]
+    try:
+        _, f_p = stats.friedmanchisquare(*cols)
+    except Exception:
+        f_p = float("nan")
+    header = ["method", "avg_rank", "best_count", "mean_acc", "friedman_p", "status"]
+    rows = []
+    for m in sorted(methods, key=lambda x: avg_rank[x]):
+        rows.append([m, f"{avg_rank[m]:.2f}", best_count[m],
+                     f"{np.mean([per_ds_acc[m][ds] for ds in valid_ds]):.4f}",
+                     (f"{f_p:.4g}" if f_p == f_p else "n/a"), "OK"])
+    write_table(OUT_DIR + "/table7_cross_main.csv", header, rows)
+    return rows
+
+
+def build_table_cross_all(data):
+    """跨数据集汇总（全部方法：主+消融+基线），用于补充材料。"""
+    datasets = detect_datasets(data)
+    allm = MAIN_METHODS + ABLATION_METHODS + BASELINE_METHODS
+    per_ds_acc = {m: {} for m in allm}
+    for ds in datasets:
+        for m in allm:
+            rows_m = data.get((ds, m), [])
+            acc = np.array([r[1] for r in rows_m if r[1] == r[1]], float)
+            if len(acc) >= 2:
+                per_ds_acc[m][ds] = float(acc.mean())
+    valid_ds = [ds for ds in datasets if all(ds in per_ds_acc[m] for m in allm)]
+    if len(valid_ds) < 2:
+        write_table(OUT_DIR + "/table8_cross_all.csv",
+                    ["method", "avg_rank", "mean_acc", "status"],
+                    [["—", "—", "—", "【待补】"]])
+        return []
+    avg_rank = {m: 0.0 for m in allm}
+    for ds in valid_ds:
+        order = sorted(allm, key=lambda m: per_ds_acc[m][ds], reverse=True)
+        for i, m in enumerate(order):
+            avg_rank[m] += (i + 1)
+    for m in allm:
+        avg_rank[m] /= len(valid_ds)
+    header = ["method", "avg_rank", "mean_acc", "status"]
+    rows = []
+    for m in sorted(allm, key=lambda x: avg_rank[x]):
+        rows.append([m, f"{avg_rank[m]:.2f}",
+                     f"{np.mean([per_ds_acc[m][ds] for ds in valid_ds]):.4f}", "OK"])
+    write_table(OUT_DIR + "/table8_cross_all.csv", header, rows)
+    return rows
+
+
 # ----------------------------------------------------------------------------
 # 真实数据模式
 # ----------------------------------------------------------------------------
@@ -339,10 +429,14 @@ def run_real():
     t4 = build_table4(data)
     t5 = build_table5(data)
     t6 = build_table6(data, OUT_DIR + "/sensitivity.csv")
+    t7 = build_table_cross(data)
+    t8 = build_table_cross_all(data)
     # summary
-    summary = {"note": "real mode; reconstructed seeds flagged; ablation/baseline/sensitivity = 待补",
+    summary = {"note": "real mode; 12 datasets; cross-dataset summary generated",
+               "datasets": detect_datasets(data),
                "table3_rows": len(t3), "table4_rows": len(t4),
-               "table5_rows": len(t5), "table6_rows": len(t6)}
+               "table5_rows": len(t5), "table6_rows": len(t6),
+               "table7_rows": len(t7), "table8_rows": len(t8)}
     with open(OUT_DIR + "/summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
     print("已写出: table3_significance.csv / table4_ablation.csv / table5_baselines.csv / "

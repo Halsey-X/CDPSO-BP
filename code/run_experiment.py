@@ -13,7 +13,7 @@ run_experiment.py —— CDPSO-BP 真实可复现实验脚本（数据驱动）
   * BP(充分)：随机初始化 + 300 epoch + 早停(验证损失连续 30 epoch 无改善)。
   * BP-30：随机初始化 + 固定 30 epoch。
   * 搜索参数：N=20, T=40, c1=c2=2, b=0.5, 速度钳制[-0.25,0.25], 标准PSO w=0.8,
-              IPSO/CDPSO 基准 w∈[0.9,0.4] 二次衰减, p_m=0.2, sigma0=0.2, 停滞阈值 3 代, k=0.2。
+              IPSO/CDPSO 基准 w∈[0.9,0.4] 二次衰减, p_m=0.2, sigma0=0.2, 停滞阈值 2 代(或多样性坍缩 rho<0.20 触发), k=0.2。
   * 微调：lr=0.05, momentum=0.9。
 
 权值维度（验证过与论文一致）：
@@ -105,6 +105,54 @@ def load_lol(path):
     X = np.array([[float(d[c]) for c in feat] for d in rows], float)
     y = np.array([1.0 if d["blueWins"] in ("1", "1.0", 1) else 0.0 for d in rows], float)
     return X, y
+
+
+def load_generic_csv(path):
+    """通用 CSV 加载器：首行为表头，末列为二值标签(0/1)，其余列为数值特征。
+    用于接入 UCI/OpenML 公开二分类数据集（Pima/WDBC/Ionosphere/...）。"""
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        r = list(csv.reader(f))
+    body = [row for row in r[1:] if row and any(c.strip() for c in row)]
+    X = np.array([[float(x) for x in row[:-1]] for row in body], float)
+    y = np.array([float(row[-1]) for row in body], float)
+    return X, y
+
+
+# 数据集注册表：(文件名, 加载方式)。special_* 走专用加载器；generic 走通用 CSV 加载器。
+# 新增 10 个公开二分类数据集，使验证规模从 2 个扩展到 12 个（应对 ASC 审稿对验证广度的要求）。
+DATA_REGISTRY = {
+    "Heart":      ("heart.csv",      "special_heart"),
+    "LoL":        ("lol.csv",        "special_lol"),
+    "Pima":       ("Pima.csv",       "generic"),
+    "WDBC":       ("WDBC.csv",       "generic"),
+    "Ionosphere": ("Ionosphere.csv", "generic"),
+    "Sonar":      ("Sonar.csv",      "generic"),
+    "Banknote":   ("Banknote.csv",   "generic"),
+    "Spambase":   ("Spambase.csv",   "generic"),
+    "Haberman":   ("Haberman.csv",   "generic"),
+    "Parkinson":  ("Parkinson.csv",   "generic"),
+    "Blood":      ("Blood.csv",      "generic"),
+    "Phoneme":    ("Phoneme.csv",    "generic"),
+}
+
+
+def load_all_datasets():
+    """按注册表加载所有可用数据集，返回 {name: (X, y)}。缺失文件自动跳过并告警。"""
+    data_dir = os.path.join(HERE, "data")
+    ds = {}
+    for name, (fname, kind) in DATA_REGISTRY.items():
+        path = os.path.join(data_dir, fname)
+        if not os.path.exists(path):
+            print(f"[warn] 数据集 {name} 缺失: {path}")
+            continue
+        if kind == "special_heart":
+            X, y = load_heart(path)
+        elif kind == "special_lol":
+            X, y = load_lol(path)
+        else:
+            X, y = load_generic_csv(path)
+        ds[name] = (X, y)
+    return ds
 
 
 def split_standardize(X, y, seed, train_ratio=0.7, val_ratio=0.1):
@@ -409,45 +457,24 @@ def run_method(Xtr, ytr, Xva, yva, Xte, yte, d_in, method, seed, rng):
     return acc, f1, g_fit
 
 
-# ----------------------------------------------------------------------------
-# 数据集注册
-# ----------------------------------------------------------------------------
-def get_datasets():
-    ds = {}
-    heart_path = os.path.join(HERE, "..", "..", "..", "tmp_heart.csv")
-    # 数据文件放在脚本同目录 data/ 下
-    data_dir = os.path.join(HERE, "data")
-    heart_candidates = [
-        os.path.join(data_dir, "heart.csv"),
-        os.path.join(HERE, "heart.csv"),
-    ]
-    lol_candidates = [
-        os.path.join(data_dir, "lol.csv"),
-        os.path.join(HERE, "lol.csv"),
-    ]
-    return heart_candidates, lol_candidates
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--methods", default="main,ablation",
                     help="main / ablation / main,ablation")
     ap.add_argument("--seeds", type=int, default=30)
-    ap.add_argument("--datasets", default="LoL,Heart")
+    ap.add_argument("--datasets", default="all",
+                    help="all / 逗号分隔的数据集名（如 LoL,Heart,Pima）")
     args = ap.parse_args()
 
-    heart_cands, lol_cands = get_datasets()
-    heart_path = next((p for p in heart_cands if os.path.exists(p)), None)
-    lol_path = next((p for p in lol_cands if os.path.exists(p)), None)
-    if heart_path is None or lol_path is None:
-        print("[错误] 找不到数据文件。请把 heart.csv 与 lol.csv 放到脚本同目录或 data/ 子目录。")
-        print("  heart 候选:", heart_cands)
-        print("  lol   候选:", lol_cands)
+    datasets = load_all_datasets()
+    if not datasets:
+        print("[错误] 未加载到任何数据集，请检查 data/ 目录。")
         return
 
-    Xh, yh = load_heart(heart_path)
-    Xl, yl = load_lol(lol_path)
-    datasets = {"Heart": (Xh, yh), "LoL": (Xl, yl)}
+    if args.datasets.strip() == "all":
+        ds_names = list(datasets.keys())
+    else:
+        ds_names = [d.strip() for d in args.datasets.split(",") if d.strip()]
 
     methods_main = ["BP", "BP-30", "PSO-BP", "IPSO-BP", "CDPSO-BP"]
     methods_ablation = ["IPSO", "IPSO+OBL", "CDPSO-无重启", "CDPSO-无扰动",
@@ -463,11 +490,12 @@ def main():
 
     n_seeds = args.seeds
     rows = []
-    total = len(datasets) * len(methods) * n_seeds
+    total = len(ds_names) * len(methods) * n_seeds
     done = 0
-    for ds_name in args.datasets.split(","):
+    for ds_name in ds_names:
         ds_name = ds_name.strip()
         if ds_name not in datasets:
+            print(f"[skip] 未知数据集 {ds_name}")
             continue
         X, y = datasets[ds_name]
         d_in = X.shape[1]

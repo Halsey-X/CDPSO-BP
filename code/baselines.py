@@ -22,7 +22,7 @@ import argparse
 import numpy as np
 
 from run_experiment import (
-    load_heart, load_lol, split_standardize, forward, mse, bp_finetune,
+    load_all_datasets, split_standardize, forward, mse, bp_finetune,
     evaluate, decode, HIDDEN, B, V_CLIP, N_POP, T_MAX, C1, C2, W_MAX, W_MIN,
     tent_sequence,
 )
@@ -273,8 +273,15 @@ GRAD_INIT = {"Xavier+Adam": "xavier", "Kaiming+Adam": "kaiming"}
 def run_baseline(Xtr, ytr, Xva, yva, Xte, yte, d_in, method, seed, rng):
     X_fit = np.vstack([Xtr, Xva]); y_fit = np.concatenate([ytr, yva])
     if method in GRAD_INIT:
-        w = adam_train(Xtr, ytr, d_in, GRAD_INIT[method], rng, epochs=30)
-        acc, f1 = evaluate(w, Xte, yte, d_in)
+        # 轻量学习率网格(0.001/0.01/0.05)，以验证集 MSE 选优，消除"未调参"缺陷
+        best_w, best_va = None, float("inf")
+        for lr in (0.001, 0.01, 0.05):
+            w = adam_train(Xtr, ytr, d_in, GRAD_INIT[method], rng, epochs=30, lr=lr)
+            va = mse(forward(Xva, w, d_in), yva)
+            if va < best_va:
+                best_va = va
+                best_w = w
+        acc, f1 = evaluate(best_w, Xte, yte, d_in)
         return acc, f1, float("nan")
     if method in PSO_VARIANTS:
         g, g_fit = _run_pso_variant(X_fit, y_fit, d_in, rng, method)
@@ -292,23 +299,27 @@ def run_baseline(Xtr, ytr, Xva, yva, Xte, yte, d_in, method, seed, rng):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, default=30)
-    ap.add_argument("--datasets", default="LoL,Heart")
+    ap.add_argument("--datasets", default="all")
     ap.add_argument("--baselines", default=",".join(BASELINES))
     args = ap.parse_args()
 
-    heart_path = os.path.join(DATA_DIR, "heart.csv")
-    lol_path = os.path.join(DATA_DIR, "lol.csv")
-    Xh, yh = load_heart(heart_path)
-    Xl, yl = load_lol(lol_path)
-    datasets = {"Heart": (Xh, yh), "LoL": (Xl, yl)}
+    datasets = load_all_datasets()
+    if not datasets:
+        print("[错误] 未加载到任何数据集，请检查 data/ 目录。")
+        return
+    if args.datasets.strip() == "all":
+        ds_names = list(datasets.keys())
+    else:
+        ds_names = [d.strip() for d in args.datasets.split(",") if d.strip()]
 
     baselines = [b.strip() for b in args.baselines.split(",") if b.strip()]
     rows = []
-    total = len(datasets) * len(baselines) * args.seeds
+    total = len(ds_names) * len(baselines) * args.seeds
     done = 0
-    for ds_name in args.datasets.split(","):
+    for ds_name in ds_names:
         ds_name = ds_name.strip()
         if ds_name not in datasets:
+            print(f"[skip] 未知数据集 {ds_name}")
             continue
         X, y = datasets[ds_name]
         d_in = X.shape[1]

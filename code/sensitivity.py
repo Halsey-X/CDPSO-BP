@@ -43,7 +43,7 @@ def main():
     d_in = X.shape[1]
 
     # 默认参数（论文 §4.2）
-    defaults = {"p_m": 0.2, "sigma0": 0.2, "stagnation": 3, "N": 20, "T": 40}
+    defaults = {"p_m": 0.2, "sigma0": 0.2, "stagnation": 2, "N": 20, "T": 40}
     grid = {
         "p_m":        [0.0, 0.1, 0.2, 0.4],
         "sigma0":     [0.1, 0.2, 0.4],
@@ -66,7 +66,7 @@ def main():
 
     rows = []
     # 基准行
-    rows.append(["default", "p_m=0.2,sigma0=0.2,stag=3,N=20,T=40", "Heart",
+    rows.append(["default", "p_m=0.2,sigma0=0.2,stag=2,N=20,T=40", "Heart",
                  f"{base_mean:.4f}±{base_std:.4f}", 0,
                  "基准（论文默认参数）"])
 
@@ -75,7 +75,7 @@ def main():
             # 跳过默认值本身（已作基准）
             is_default = (param == "p_m" and abs(val - 0.2) < 1e-9) or \
                          (param == "sigma0" and abs(val - 0.2) < 1e-9) or \
-                         (param == "stagnation" and val == 3) or \
+                         (param == "stagnation" and val == 2) or \
                          (param == "N" and val == 20) or \
                          (param == "T" and val == 40)
             if is_default:
