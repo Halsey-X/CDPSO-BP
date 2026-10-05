@@ -1,0 +1,40 @@
+﻿param,value,dataset,acc_std,rank,note
+default,default,Heart,0.8476±0.0192,,default configuration
+p_m,0.0,Heart,0.8481±0.0103,,delta=+0.0541pp
+p_m,0.1,Heart,0.8481±0.0185,,delta=+0.0541pp
+p_m,0.4,Heart,0.8470±0.0153,,delta=-0.0541pp
+sigma0,0.1,Heart,0.8411±0.0224,,delta=-0.6486pp
+sigma0,0.4,Heart,0.8416±0.0210,,delta=-0.5946pp
+stagnation,1,Heart,0.8481±0.0179,,delta=+0.0541pp
+stagnation,3,Heart,0.8438±0.0191,,delta=-0.3784pp
+stagnation,6,Heart,0.8438±0.0191,,delta=-0.3784pp
+N,10,Heart,0.8449±0.0254,,delta=-0.2703pp
+N,40,Heart,0.8411±0.0153,,delta=-0.6486pp
+T,20,Heart,0.8449±0.0213,,delta=-0.2703pp
+T,80,Heart,0.8497±0.0195,,delta=+0.2162pp
+default,default,Sonar,0.8000±0.0413,,default configuration
+p_m,0.0,Sonar,0.7860±0.0422,,delta=-1.3953pp
+p_m,0.1,Sonar,0.8023±0.0368,,delta=+0.2326pp
+p_m,0.4,Sonar,0.8000±0.0612,,delta=-0.0000pp
+sigma0,0.1,Sonar,0.8140±0.0425,,delta=+1.3953pp
+sigma0,0.4,Sonar,0.8093±0.0436,,delta=+0.9302pp
+stagnation,1,Sonar,0.7930±0.0319,,delta=-0.6977pp
+stagnation,3,Sonar,0.8000±0.0413,,delta=+0.0000pp
+stagnation,6,Sonar,0.8000±0.0413,,delta=+0.0000pp
+N,10,Sonar,0.8186±0.0475,,delta=+1.8605pp
+N,40,Sonar,0.8070±0.0381,,delta=+0.6977pp
+T,20,Sonar,0.7953±0.0422,,delta=-0.4651pp
+T,80,Sonar,0.7977±0.0526,,delta=-0.2326pp
+default,default,Banknote,0.9760±0.0069,,default configuration
+p_m,0.0,Banknote,0.9735±0.0077,,delta=-0.2545pp
+p_m,0.1,Banknote,0.9745±0.0100,,delta=-0.1455pp
+p_m,0.4,Banknote,0.9778±0.0078,,delta=+0.1818pp
+sigma0,0.1,Banknote,0.9745±0.0059,,delta=-0.1455pp
+sigma0,0.4,Banknote,0.9760±0.0069,,delta=+0.0000pp
+stagnation,1,Banknote,0.9782±0.0075,,delta=+0.2182pp
+stagnation,3,Banknote,0.9756±0.0067,,delta=-0.0364pp
+stagnation,6,Banknote,0.9756±0.0067,,delta=-0.0364pp
+N,10,Banknote,0.9724±0.0103,,delta=-0.3636pp
+N,40,Banknote,0.9782±0.0073,,delta=+0.2182pp
+T,20,Banknote,0.9742±0.0090,,delta=-0.1818pp
+T,80,Banknote,0.9778±0.0081,,delta=+0.1818pp
